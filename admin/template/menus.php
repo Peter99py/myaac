@@ -40,6 +40,7 @@ $menus = [
 			['name' => 'Mass Account Actions', 'link' => 'mass_account', 'icon' => 'globe', 'order' => 10],
 			['name' => 'Mass Teleport Actions', 'link' => 'mass_teleport', 'icon' => 'globe', 'order' => 20],
 			['name' => 'Notepad', 'link' => 'notepad', 'icon' => 'marker', 'order' => 30],
+			['name' => 'In-Game Commands', 'link' => 'commands', 'icon' => 'terminal', 'order' => 35],
 			['name' => 'phpinfo', 'link' => 'phpinfo', 'icon' => 'server', 'order' => 40],
 		],
 	],

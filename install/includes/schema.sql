@@ -259,3 +259,13 @@ CREATE TABLE IF NOT EXISTS `myaac_weapons`
 	`vocations` varchar(100) NOT NULL DEFAULT '',
 	PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `commands`
+(
+	`id` int NOT NULL AUTO_INCREMENT,
+	`words` varchar(255) NOT NULL,
+	`description` varchar(255) NOT NULL DEFAULT '',
+	`group_type` enum('Player','GM','God') NOT NULL DEFAULT 'God',
+	`hide` tinyint(1) NOT NULL DEFAULT 0,
+	PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;
