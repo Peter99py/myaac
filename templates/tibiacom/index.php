@@ -4,6 +4,7 @@ defined('MYAAC') or die('Direct access not allowed!');
 if(isset($config['boxes']))
 	$config['boxes'] = explode(",", $config['boxes']);
 ?>
+<!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
 	<?php echo template_place_holder('head_start'); ?>
