@@ -19,7 +19,7 @@ function sendError($message, $code = 3){
 	die(json_encode($ret));
 }
 
-# event schedule function
+# event schedule function (legado XML)
 function parseEvent($table1, $date, $table2)
 {
 	if ($table1) {
@@ -61,49 +61,85 @@ switch ($action) {
 
 	case 'eventschedule':
 		$eventlist = [];
-		$file_path = config('server_path') . 'data/XML/events.xml';
-		if (!file_exists($file_path)) {
-			die(json_encode([]));
-		}
-		$xml = new DOMDocument;
-		$xml->load($file_path);
-		$tmplist = [];
-		$tableevent = $xml->getElementsByTagName('event');
 
-		foreach ($tableevent as $event) {
-			if ($event) { $tmplist = [
-			'colorlight' => parseEvent($event->getElementsByTagName('colors'), false, 'colorlight'),
-			'colordark' => parseEvent($event->getElementsByTagName('colors'), false, 'colordark'),
-			'description' => parseEvent($event->getElementsByTagName('description'), false, 'description'),
-			'displaypriority' => intval(parseEvent($event->getElementsByTagName('details'), false, 'displaypriority')),
-			'enddate' => intval(parseEvent($event, true, false)),
-			'isseasonal' => getBoolean(intval(parseEvent($event->getElementsByTagName('details'), false, 'isseasonal'))),
-			'name' => $event->getAttribute('name'),
-			'startdate' => intval(parseEvent($event, true, true)),
-			'specialevent' => intval(parseEvent($event->getElementsByTagName('details'), false, 'specialevent'))
-				];
-			$eventlist[] = $tmplist; } }
-		die(json_encode(['eventlist' => $eventlist, 'lastupdatetimestamp' => time()]));
+		$jsonCandidates = [
+			config('server_path') . 'data/json/eventscheduler/events.json',
+			BASE_DIR . 'data/json/eventscheduler/events.json',
+			'/canary/data/json/eventscheduler/events.json'
+		];
+
+		$eventsJsonPath = null;
+		foreach ($jsonCandidates as $candidate) {
+			if (file_exists($candidate)) {
+				$eventsJsonPath = $candidate;
+				break;
+			}
+		}
+
+		if ($eventsJsonPath) {
+			$rawJson = file_get_contents($eventsJsonPath);
+			$data = json_decode($rawJson, true);
+
+			if (isset($data['events']) && is_array($data['events'])) {
+				foreach ($data['events'] as $event) {
+					$startDate = !empty($event['startdate']) ? strtotime($event['startdate']) : time();
+					$endDate   = !empty($event['enddate']) ? strtotime($event['enddate']) : time();
+
+					$eventlist[] = [
+						'name'            => $event['name'] ?? '',
+						'description'     => $event['description'] ?? '',
+						'startdate'       => (int)$startDate,
+						'enddate'         => (int)$endDate,
+						'colorlight'      => $event['colors']['colorlight'] ?? '#3d5a73',
+						'colordark'       => $event['colors']['colordark'] ?? '#2b3e50',
+						'displaypriority' => (int)($event['details']['displaypriority'] ?? 1),
+						'isseasonal'      => (bool)($event['details']['isseasonal'] ?? false),
+						'specialevent'    => (int)($event['details']['specialevent'] ?? 0)
+					];
+				}
+			}
+		} else {
+			$filePathXml = config('server_path') . 'data/XML/events.xml';
+			if (file_exists($filePathXml)) {
+				$xml = new DOMDocument;
+				$xml->load($filePathXml);
+				$tableevent = $xml->getElementsByTagName('event');
+
+				foreach ($tableevent as $event) {
+					if ($event) {
+						$eventlist[] = [
+							'colorlight'      => parseEvent($event->getElementsByTagName('colors'), false, 'colorlight'),
+							'colordark'       => parseEvent($event->getElementsByTagName('colors'), false, 'colordark'),
+							'description'     => parseEvent($event->getElementsByTagName('description'), false, 'description'),
+							'displaypriority' => intval(parseEvent($event->getElementsByTagName('details'), false, 'displaypriority')),
+							'enddate'         => intval(parseEvent($event, true, false)),
+							'isseasonal'      => getBoolean(intval(parseEvent($event->getElementsByTagName('details'), false, 'isseasonal'))),
+							'name'            => $event->getAttribute('name'),
+							'startdate'       => intval(parseEvent($event, true, true)),
+							'specialevent'    => intval(parseEvent($event->getElementsByTagName('details'), false, 'specialevent'))
+						];
+					}
+				}
+			}
+		}
+
+		die(json_encode([
+			'eventlist'           => $eventlist,
+			'lastupdatetimestamp' => time()
+		]));
 
 	case 'boostedcreature':
-		$clientVersion = (int)setting('core.client');
+		$creatureBoost = $db->query("SELECT `raceid` FROM " . $db->tableName('boosted_creature') . " LIMIT 1")->fetch();
+		$bossBoost     = $db->query("SELECT `raceid` FROM " . $db->tableName('boosted_boss') . " LIMIT 1")->fetch();
 
-		// 13.40 and up
-		if ($clientVersion >= 1340) {
-			$creatureBoost = $db->query("SELECT * FROM " . $db->tableName('boosted_creature'))->fetchAll();
-			$bossBoost     = $db->query("SELECT * FROM " . $db->tableName('boosted_boss'))->fetchAll();
-			die(json_encode([
-				//'boostedcreature' => true,
-				'bossraceid'      => intval($bossBoost[0]['raceid']),
-				'creatureraceid'  => intval($creatureBoost[0]['raceid']),
-			]));
-		}
+		$creatureRaceId = !empty($creatureBoost['raceid']) ? (int)$creatureBoost['raceid'] : 0;
+		$bossRaceId     = !empty($bossBoost['raceid']) ? (int)$bossBoost['raceid'] : 0;
 
-		// lower clients
-		$boostedCreature = BoostedCreature::first();
 		die(json_encode([
 			'boostedcreature' => true,
-			'raceid' => $boostedCreature->raceid
+			'creatureraceid'  => $creatureRaceId,
+			'raceid'          => $creatureRaceId,
+			'bossraceid'      => $bossRaceId
 		]));
 
 	case 'login':
@@ -220,46 +256,6 @@ switch ($action) {
 			}
 		}
 
-		/*
-		 * not needed anymore?
-		if (fieldExist('premdays', 'accounts') && fieldExist('lastday', 'accounts')) {
-			$save = false;
-			$timeNow = time();
-			$premDays = $account->premdays;
-			$lastDay = $account->lastday;
-			$lastLogin = $lastDay;
-
-			if ($premDays != 0 && $premDays != PHP_INT_MAX) {
-				if ($lastDay == 0) {
-					$lastDay = $timeNow;
-					$save = true;
-				} else {
-					$days = (int)(($timeNow - $lastDay) / 86400);
-					if ($days > 0) {
-						if ($days >= $premDays) {
-							$premDays = 0;
-							$lastDay = 0;
-						} else {
-							$premDays -= $days;
-							$reminder = ($timeNow - $lastDay) % 86400;
-							$lastDay = $timeNow - $reminder;
-						}
-
-						$save = true;
-					}
-				}
-			} else if ($lastDay != 0) {
-				$lastDay = 0;
-				$save = true;
-			}
-			if ($save) {
-				$account->premdays = $premDays;
-				$account->lastday = $lastDay;
-				$account->save();
-			}
-		}
-		*/
-
 		$worlds = [$world];
 		$playdata = compact('worlds', 'characters');
 
@@ -297,26 +293,4 @@ switch ($action) {
 	default:
 		sendError("Unrecognized event {$action}.");
 	break;
-}
-
-function create_char($player, $highestLevelId) {
-	return [
-		'worldid' => 0,
-		'name' => $player->name,
-		'ismale' => $player->sex === 1,
-		'tutorial' => isset($player->istutorial) && $player->istutorial,
-		'level' => $player->level,
-		'vocation' => $player->vocation_name,
-		'outfitid' => $player->looktype,
-		'headcolor' => $player->lookhead,
-		'torsocolor' => $player->lookbody,
-		'legscolor' => $player->looklegs,
-		'detailcolor' => $player->lookfeet,
-		'addonsflags' => $player->lookaddons,
-		'ishidden' => $player->is_deleted,
-		'istournamentparticipant' => false,
-		'ismaincharacter' => $highestLevelId === $player->getKey(),
-		'dailyrewardstate' => $player->isreward ?? 0,
-		'remainingdailytournamentplaytime' => 0
-	];
 }
